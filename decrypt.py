@@ -1,5 +1,4 @@
 import argparse
-from re import VERBOSE
 import shutil
 import sys
 import zono.zonocrypt
