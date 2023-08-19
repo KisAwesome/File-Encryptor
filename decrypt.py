@@ -3,13 +3,15 @@ import zono.colorlogger
 import zono.zonocrypt
 import zono.workers
 import argparse
+import zipfile
+import logging
 import shutil
+import time
 import sys
 import os
-import time
-import zipfile
 
 crypt = zono.zonocrypt.zonocrypt()
+logger = zono.colorlogger.create_logger("decrypt")
 
 
 def _divide_chunks(l, n):
@@ -19,12 +21,6 @@ def _divide_chunks(l, n):
 
 def chunks(l, n):
     return list(_divide_chunks(l, n))
-
-
-def log(message, func=zono.colorlogger.log, *args, **kwargs):
-    global VERBOSE
-    if VERBOSE:
-        func(message, *args, **kwargs)
 
 
 def unzip(path):
@@ -55,75 +51,69 @@ def _decrypt(enc, key, worker):
 
 def decrypt_folder(opts, hashed_key):
     split_encrypted = opts.file_bytes.split(b"&$&")
-    log("Split encrypted bytes")
+    logger.debug("Split encrypted bytes")
     worker = zono.workers.ProgressWorkload(
         opts.max_threads, ordered_return=True, tqdm_opts=dict(unit="chunks")
     )
 
-    log("Starting threads")
-    decrypted_list = worker.run(split_encrypted, _decrypt, hashed_key)
+    logger.debug("Starting threads")
+    decrypted_list = worker.run(split_encrypted, _decrypt, hashed_key, worker)
     if isinstance(decrypted_list, zono.workers.StoppedWorker):
-        zono.colorlogger.error(
-            "Chunk decryption failed: incorrect key or corrupted file"
-        )
+        logger.error("Chunk decryption failed: incorrect key or corrupted file")
         return sys.exit()
-    log("Threads completed, decrypted chunks")
+    logger.debug("Threads completed, decrypted chunks")
     file_bytes = b"".join(decrypted_list)
     os.mkdir("temp.encrypted")
     with open("temp.encrypted/temp.zip", "wb") as f:
         f.write(file_bytes)
 
-    log("Wrote to file")
+    logger.debug("Wrote to file")
     unzip("temp.encrypted/temp.zip")
-    log("Unzipped folder successfully")
+    logger.debug("Unzipped folder successfully")
     print(f"Decrypted file to {opts.filename}")
-    log(f"time taken: {time.time()-opts.start_time}s", print)
+    logger.info(f"time taken: {time.time()-opts.start_time}s", print)
     shutil.rmtree("temp.encrypted")
 
 
 def decrypt_file(opts, hashed_key):
     split_encrypted = opts.file_bytes.split(b"&$&")
-    log("Split encrypted bytes")
+    logger.debug("Split encrypted bytes")
     worker = zono.workers.ProgressWorkload(
         opts.max_threads, ordered_return=True, tqdm_opts=dict(unit="chunks")
     )
-    log("Starting threads")
+    logger.debug("Starting threads")
     decrypted_list = worker.run(split_encrypted, _decrypt, hashed_key, worker)
     if isinstance(decrypted_list, zono.workers.StoppedWorker):
-        zono.colorlogger.error(
-            "Chunk decryption failed: incorrect key or corrupted file"
-        )
+        logger.error("Chunk decryption failed: incorrect key or corrupted file")
         return sys.exit()
-    log("Threads completed, decrypted chunks")
+    logger.debug("Threads completed, decrypted chunks")
     file_bytes = b"".join(decrypted_list)
     with open(opts.output_file, "wb") as f:
         f.write(file_bytes)
     print(f"Decrypted file to {opts.output_file}")
-    log(f"time taken: {time.time()-opts.start_time}s", print)
+    logger.info(f"time taken: {time.time()-opts.start_time}s", print)
 
 
 def decrypt_archived_file(opts, hashed_key):
     split_encrypted = opts.file_bytes.split(b"&$&")
-    log("Split encrypted bytes")
+    logger.debug("Split encrypted bytes")
     worker = zono.workers.ProgressWorkload(
         opts.max_threads, ordered_return=True, tqdm_opts=dict(unit="chunks")
     )
-    log("Starting threads")
+    logger.debug("Starting threads")
     decrypted_list = worker.run(split_encrypted, _decrypt, hashed_key, worker)
     if isinstance(decrypted_list, zono.workers.StoppedWorker):
-        zono.colorlogger.error(
-            "Chunk decryption failed: incorrect key or corrupted file"
-        )
+        logger.error("Chunk decryption failed: incorrect key or corrupted file")
         return sys.exit()
-    log("Threads completed, decrypted chunks")
+    logger.debug("Threads completed, decrypted chunks")
     file_bytes = b"".join(decrypted_list)
-    log("File decrypted")
+    logger.debug("File decrypted")
     with open("temp_file.zip", "wb") as f:
         f.write(file_bytes)
 
     unzip("temp_file.zip")
-    log("Unzipped file")
-    zono.colorlogger.major_log("File decrypted successfully")
+    logger.debug("Unzipped file")
+    logger.important_log("File decrypted successfully")
 
 
 def decrypt(opts, hashed_key):
@@ -131,7 +121,7 @@ def decrypt(opts, hashed_key):
     with open(opts.file, "rb") as f:
         file_bytes_enc = f.read()
 
-    log("Loaded file")
+    logger.debug("Loaded file")
 
     bytes_length = len(file_bytes_enc)
     file_type_start = file_bytes_enc.index(b"[")
@@ -148,7 +138,7 @@ def decrypt(opts, hashed_key):
 
     try:
         filetype_dec = crypt.decrypt(filetype_enc, hashed_key)
-        log("Decrypted file type")
+        logger.debug("Decrypted file type")
 
     except zono.zonocrypt.IncorrectDecryptionKey:
         zono.colorlogger.error("Incorrect decryption key")
@@ -160,15 +150,17 @@ def decrypt(opts, hashed_key):
 
     if "$#ARCHIVED#$" in filetype_dec:
         filetype_dec = filetype_dec.replace("$#ARCHIVED#$", "")
-        log(f"Identified file type: Archived file with the name {filetype_dec}")
+        logger.debug(
+            f"Identified file type: Archived file with the name {filetype_dec}"
+        )
         decrypt_archived_file(opts, hashed_key)
 
     elif "$#FOLDER#$" in filetype_dec:
         filetype_dec = filetype_dec.replace("$#FOLDER#$", "")
-        log(f"Identified file type: Folder with the name {filetype_dec}")
+        logger.debug(f"Identified file type: Folder with the name {filetype_dec}")
         decrypt_folder(opts, hashed_key)
     else:
-        log(f"Identified file type: file type: {filetype_dec}")
+        logger.debug(f"Identified file type: file type: {filetype_dec}")
         decrypt_file(opts, hashed_key)
 
 
@@ -205,6 +197,22 @@ def parse_args():
         action="store_true",
         help="Hash the key regardless of whether it is already valid",
     )
+    pa.add_argument(
+        "-v",
+        "--verbose",
+        action="count",
+        default=0,
+        help="Increase verbosity level (up to 2 times)",
+    )
+
+    verbosity = min(2, opts.verbose)
+    log_levels = [
+        logging.ERROR,
+        logging.INFO,
+        logging.DEBUG,
+    ]
+    log_level = log_levels[verbosity]
+    logger.setLevel(log_level)
 
     opts = pa.parse_args()
     return opts, pa

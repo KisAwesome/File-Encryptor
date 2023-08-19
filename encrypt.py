@@ -1,23 +1,24 @@
 #!/usr/bin/env python3
-import argparse
-import shutil
-import sys
-import zono.zonocrypt
 from english_words import get_english_words_set
-import random
-import os
-import zipfile
-import subprocess
-import zono.workers
 import zono.colorlogger
+import zono.zonocrypt
+import zono.workers
+import subprocess
+import argparse
+import zipfile
+import logging
+import shutil
+import random
 import time
+import sys
+import os
 
 
 english_words_set = list(get_english_words_set(["web2"], lower=True))
 
 crypt = zono.zonocrypt.zonocrypt()
-VERBOSE = False
 windows = sys.platform == "win32"
+logger = zono.colorlogger.create_logger("encrypt")
 
 
 def _divide_chunks(l, n):
@@ -27,12 +28,6 @@ def _divide_chunks(l, n):
 
 def chunks(l, n):
     return list(_divide_chunks(l, n))
-
-
-def log(message, func=zono.colorlogger.log, *args, **kwargs):
-    global VERBOSE
-    if VERBOSE:
-        func(message, *args, **kwargs)
 
 
 def hide_dir(Dir):
@@ -108,22 +103,22 @@ def encrypt_folder(opts, hashed_key, string_key):
     file = "temps.encrypted/file_zip"
     os.makedirs("temps.encrypted")
     zip_dir(opts.file, file)
-    log("Zipped folder")
+    logger.debug("Zipped folder")
 
     with open(file + ".zip", "rb") as f:
         file_bytes = f.read()
 
-    log("Loaded file")
+    logger.debug("Loaded compressed file")
 
     split_file_bytes = chunks(file_bytes, opts.chunk_size)
-    log("Split folder into chunks")
-    log("Starting threads")
+    logger.debug("Split folder into chunks")
+    logger.debug("Starting threads")
     worker = zono.workers.ProgressWorkload(
         opts.max_threads, ordered_return=True, tqdm_opts=dict(unit="chunks")
     )
 
     encrypted_chunks = worker.run(split_file_bytes, _encrypt, hashed_key)
-    log("Encrypted chunks")
+    logger.debug("Encrypted chunks")
     enc_file_byte = b"&$&".join(encrypted_chunks)
 
     with open(opts.output_file, "wb") as f:
@@ -134,9 +129,9 @@ def encrypt_folder(opts, hashed_key, string_key):
     with open(opts.output_file, "a") as f:
         f.write(f"[{enc_input_file}]")
 
-    zono.colorlogger.major_log("File successfully encrypted")
+    logger.important_log("File successfully encrypted")
     print(f"String key: {string_key}\nHashed key: {hashed_key.decode('utf-8')}")
-    log(f"time taken: {time.time()-start_time}s", print)
+    logger.info(f"time taken: {time.time()-start_time}s", print)
 
     shutil.rmtree("temps.encrypted")
     if opts.replace:
@@ -152,24 +147,24 @@ def encrypt_file(opts, hashed_key, string_key):
         file = "temps.encrypted/file_zip.zip"
         os.makedirs("temps.encrypted")
         write_zip(opts.file, file)
-        log("Zipped file")
+        logger.debug("Zipped file")
         opts.file = file
         input_file_enc += "$#ARCHIVED#$"
 
     with open(opts.file, "rb") as file:
         file_bytes = file.read()
 
-    log("Loaded file")
+    logger.debug("Loaded compressed file")
 
     split_file_bytes = chunks(file_bytes, opts.chunk_size)
-    log("Split file into chunks")
-    log("Starting threads")
+    logger.debug("Split file into chunks")
+    logger.debug("Starting threads")
     worker = zono.workers.ProgressWorkload(
         opts.max_threads, ordered_return=True, tqdm_opts=dict(unit="chunks")
     )
 
     encrypted_chunks = worker.run(split_file_bytes, _encrypt, hashed_key)
-    log("Encrypted chunks")
+    logger.debug("Encrypted chunks")
     enc_file_byte = b"&$&".join(encrypted_chunks)
 
     with open(opts.output_file, "wb") as f:
@@ -180,9 +175,9 @@ def encrypt_file(opts, hashed_key, string_key):
     with open(opts.output_file, "a") as f:
         f.write(f"[{enc_input_file}]")
 
-    zono.colorlogger.major_log("File successfully encrypted")
+    logger.important_log("File successfully encrypted")
     print(f"String key: {string_key}\nHashed key: {hashed_key.decode('utf-8')}")
-    log(f"time taken: {time.time()-start_time}s", print)
+    logger.info(f"time taken: {time.time()-start_time}s", print)
     if opts.archive:
         shutil.rmtree("temps.encrypted")
     if opts.replace:
@@ -245,16 +240,27 @@ def parse_args():
         default=32768,
         type=int,
     )
-
     pa.add_argument(
-        "-v", "--verbose", action="store_true", help="Prints extra information"
+        "-v",
+        "--verbose",
+        action="count",
+        default=0,
+        help="Increase verbosity level (up to 2 times)",
     )
+
+    verbosity = min(2, opts.verbose)
+    log_levels = [
+        logging.ERROR,
+        logging.INFO,
+        logging.DEBUG,
+    ]
+    log_level = log_levels[verbosity]
+    logger.setLevel(log_level)
     opts = pa.parse_args()
     return opts, pa
 
 
 def main():
-    global VERBOSE
     opts, pa = parse_args()
     if opts.hashing_function:
         hashed = crypt.hashing_function(opts.hashing_function, salt=b"").decode("utf-8")
@@ -266,8 +272,7 @@ def main():
         print("No key provided a random key will be used")
         opts.random_key = True
 
-    VERBOSE = opts.verbose
-    string_key, hashed_key = parse_key(opts) # type: ignore
+    string_key, hashed_key = parse_key(opts)  # type: ignore
 
     if os.path.exists("temps.encrypted"):
         shutil.rmtree("temps.encrypted")
@@ -279,4 +284,5 @@ def main():
 
 
 if __name__ == "__main__":
+    zono.colorlogger.MAIN_LOGGERS.append("encrypt")
     main()
