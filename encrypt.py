@@ -131,7 +131,7 @@ def encrypt_folder(opts, hashed_key, string_key):
 
     logger.important_log("File successfully encrypted")
     print(f"String key: {string_key}\nHashed key: {hashed_key.decode('utf-8')}")
-    logger.info(f"time taken: {time.time()-start_time}s", print)
+    logger.print(f"time taken: {time.time()-start_time}s")
 
     shutil.rmtree("temps.encrypted")
     if opts.replace:
@@ -170,14 +170,14 @@ def encrypt_file(opts, hashed_key, string_key):
     with open(opts.output_file, "wb") as f:
         f.write(enc_file_byte)
 
-    enc_input_file = crypt.encrypt(input_file_enc, hashed_key)
+    enc_input_file = crypt.encrypt(input_file_enc.encode("utf-8"), hashed_key)
 
     with open(opts.output_file, "a") as f:
         f.write(f"[{enc_input_file}]")
 
     logger.important_log("File successfully encrypted")
     print(f"String key: {string_key}\nHashed key: {hashed_key.decode('utf-8')}")
-    logger.info(f"time taken: {time.time()-start_time}s", print)
+    logger.print(f"time taken: {time.time()-start_time}s")
     if opts.archive:
         shutil.rmtree("temps.encrypted")
     if opts.replace:
@@ -248,6 +248,7 @@ def parse_args():
         help="Increase verbosity level (up to 2 times)",
     )
 
+    opts = pa.parse_args()
     verbosity = min(2, opts.verbose)
     log_levels = [
         logging.ERROR,
@@ -256,7 +257,6 @@ def parse_args():
     ]
     log_level = log_levels[verbosity]
     logger.setLevel(log_level)
-    opts = pa.parse_args()
     return opts, pa
 
 
@@ -284,5 +284,4 @@ def main():
 
 
 if __name__ == "__main__":
-    zono.colorlogger.MAIN_LOGGERS.append("encrypt")
     main()

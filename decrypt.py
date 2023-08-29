@@ -71,7 +71,7 @@ def decrypt_folder(opts, hashed_key):
     unzip("temp.encrypted/temp.zip")
     logger.debug("Unzipped folder successfully")
     print(f"Decrypted file to {opts.filename}")
-    logger.info(f"time taken: {time.time()-opts.start_time}s", print)
+    logger.print(f"time taken: {time.time()-opts.start_time}s")
     shutil.rmtree("temp.encrypted")
 
 
@@ -91,7 +91,7 @@ def decrypt_file(opts, hashed_key):
     with open(opts.output_file, "wb") as f:
         f.write(file_bytes)
     print(f"Decrypted file to {opts.output_file}")
-    logger.info(f"time taken: {time.time()-opts.start_time}s", print)
+    logger.print(f"time taken: {time.time()-opts.start_time}s", print)
 
 
 def decrypt_archived_file(opts, hashed_key):
@@ -178,10 +178,6 @@ def parse_args():
     )
 
     pa.add_argument(
-        "-v", "--verbose", action="store_true", help="Prints extra information"
-    )
-
-    pa.add_argument(
         "-replace",
         action="store_true",
         help="Replace existing file with decrypted version",
@@ -205,6 +201,7 @@ def parse_args():
         help="Increase verbosity level (up to 2 times)",
     )
 
+    opts = pa.parse_args()
     verbosity = min(2, opts.verbose)
     log_levels = [
         logging.ERROR,
@@ -214,7 +211,6 @@ def parse_args():
     log_level = log_levels[verbosity]
     logger.setLevel(log_level)
 
-    opts = pa.parse_args()
     return opts, pa
 
 
